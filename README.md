@@ -17,7 +17,7 @@ Automated deployment of a Node.js application with nginx reverse proxy and **wil
 Internet
     │
     ▼
-Cloudflare DNS (baalz3ro.org)
+Cloudflare DNS (baalz3ro.org) + Cloudflare tunnel to Host
     │
     ▼
 Ubuntu VM (Docker Host)
