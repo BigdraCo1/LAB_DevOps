@@ -39,6 +39,8 @@ Ubuntu VM (Docker Host)
 - Cloudflare account with your domain
 - Cloudflare API Token (DNS edit permissions)
 - Ansible installed on control machine
+- Cloudflare tunnel to Host due to having only private IP
+- Port forwarding from VM to Host
 
 ## Quick Start
 
