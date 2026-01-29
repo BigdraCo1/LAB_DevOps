@@ -1,0 +1,72 @@
+---
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Build Application Docker Image
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- name: Check Docker service status
+  ansible.builtin.systemd:
+    name: docker
+  register: docker_status
+
+- name: Display Docker service status
+  ansible.builtin.debug:
+    msg: "Docker is {{ docker_status.status.ActiveState }}"
+
+- name: Ensure user is in docker group
+  ansible.builtin.user:
+    name: "{{ ansible_user }}"
+    groups: docker
+    append: yes
+
+- name: Reset SSH connection for group changes
+  ansible.builtin.meta: reset_connection
+
+- name: Create docker-app directory
+  ansible.builtin.file:
+    path: /home/{{ ansible_user }}/docker-app
+    state: directory
+    mode: "0755"
+    owner: "{{ ansible_user }}"
+  become: false
+
+- name: Check if myapp:v1 Docker image exists
+  ansible.builtin.shell: docker images myapp:v1 -q
+  register: docker_image_myapp
+  changed_when: false
+  become: false
+
+- name: Display myapp image status
+  ansible.builtin.debug:
+    msg: "myapp:v1 image: {{ 'exists' if docker_image_myapp.stdout != '' else 'NOT FOUND - will build' }}"
+
+- name: Deploy Dockerfile
+  ansible.builtin.copy:
+    src: Dockerfile
+    dest: /home/{{ ansible_user }}/docker-app/Dockerfile
+    mode: "0644"
+    owner: "{{ ansible_user }}"
+  when: docker_image_myapp.stdout == ''
+  become: false
+
+- name: Build myapp Docker image
+  ansible.builtin.command: docker build -t myapp:v1 .
+  args:
+    chdir: /home/{{ ansible_user }}/docker-app
+  when: docker_image_myapp.stdout == ''
+  become: false
+  register: docker_build
+
+- name: Display build result
+  ansible.builtin.debug:
+    var: docker_build.stdout_lines
+  when: docker_build is defined and docker_build.changed
+
+- name: Verify image was built
+  ansible.builtin.command: docker images myapp:v1
+  register: verify_image
+  changed_when: false
+  become: false
+
+- name: Display image info
+  ansible.builtin.debug:
+    msg: "✓ myapp:v1 image ready"

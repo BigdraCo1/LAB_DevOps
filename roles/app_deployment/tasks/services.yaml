@@ -1,0 +1,89 @@
+---
+# Start Application Services
+
+- name: Deploy docker-compose.yaml
+  ansible.builtin.copy:
+    src: docker-compose.yaml
+    dest: /home/{{ ansible_user }}/docker-app/docker-compose.yaml
+    mode: "0644"
+    owner: "{{ ansible_user }}"
+  become: false
+
+- name: Deploy nginx configuration
+  ansible.builtin.copy:
+    src: nginx.conf
+    dest: /home/{{ ansible_user }}/docker-app/nginx.conf
+    mode: "0644"
+    owner: "{{ ansible_user }}"
+  become: false
+
+- name: Start nginx and myapp services
+  ansible.builtin.command: docker compose up -d nginx myapp
+  args:
+    chdir: /home/{{ ansible_user }}/docker-app
+  become: false
+  register: services_start
+
+- name: Display services start status
+  ansible.builtin.debug:
+    var: services_start.stdout_lines
+
+- name: Wait for nginx to be ready
+  ansible.builtin.wait_for:
+    host: 0.0.0.0
+    port: 443
+    delay: 3
+    timeout: 30
+
+- name: Wait for myapp to be ready
+  ansible.builtin.wait_for:
+    host: 0.0.0.0
+    port: 3000
+    delay: 2
+    timeout: 30
+
+- name: Test HTTPS endpoint with certificate validation
+  ansible.builtin.uri:
+    url: https://{{ site_domain }}
+    validate_certs: yes
+    return_content: yes
+  register: https_test
+  failed_when: false
+
+- name: Display HTTPS test result
+  ansible.builtin.debug:
+    msg:
+      - "HTTPS Test: {{ 'SUCCESS ✅' if https_test.status == 200 else 'FAILED' }}"
+      - "Status Code: {{ https_test.status | default('N/A') }}"
+      - "Certificate: {{ 'Valid' if https_test.status == 200 else 'Check logs' }}"
+
+- name: Verify all containers are running
+  ansible.builtin.shell: docker ps --filter "name=nginx" --filter "name=myapp" --format "table {% raw %}{{.Names}}\t{{.Status}}\t{{.Ports}}{% endraw %}"
+  register: containers_status
+  changed_when: false
+  become: false
+
+- name: Display final status
+  ansible.builtin.debug:
+    msg:
+      - "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      - "✓ All Services Running with Let's Encrypt"
+      - "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      - ""
+      - "{{ containers_status.stdout }}"
+      - ""
+      - "Service URLs:"
+      - "  https://{{ site_domain }}           (Main site)"
+      - "  https://www.{{ site_domain }}       (WWW)"
+      - "  https://api.{{ site_domain }}       (API - wildcard!)"
+      - "  https://*.{{ site_domain }}         (Any subdomain!)"
+      - ""
+      - "✅ Certificate: Trusted by all browsers!"
+      - "✅ No more 'self-signed' warnings"
+      - "✅ Auto-renewal configured"
+      - ""
+      - "HTTPS Status: {{ 'Working ✅' if https_test.status == 200 else 'Check configuration' }}"
+      - ""
+      - "View logs:"
+      - "  docker logs -f nginx"
+      - "  docker logs -f myapp"

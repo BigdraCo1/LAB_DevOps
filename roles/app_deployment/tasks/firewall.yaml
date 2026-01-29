@@ -1,0 +1,34 @@
+---
+# Configure Firewall Rules
+
+- name: Allow SSH
+  ansible.builtin.ufw:
+    rule: allow
+    port: 22
+    proto: tcp
+
+- name: Allow HTTP
+  ansible.builtin.ufw:
+    rule: allow
+    port: 80
+    proto: tcp
+
+- name: Allow HTTPS
+  ansible.builtin.ufw:
+    rule: allow
+    port: 443
+    proto: tcp
+
+- name: Set default deny policy
+  ansible.builtin.ufw:
+    state: enabled
+    policy: deny
+
+- name: Check UFW firewall status
+  ansible.builtin.command: ufw status verbose
+  register: ufw_status
+  changed_when: false
+
+- name: Display firewall status
+  ansible.builtin.debug:
+    var: ufw_status.stdout_lines

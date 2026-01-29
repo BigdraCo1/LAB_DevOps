@@ -1,0 +1,23 @@
+---
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Step 1: Build Application Image
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- name: Build Docker images
+  ansible.builtin.include_tasks: docker.yaml
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Step 2: Setup Let's Encrypt with Cloudflare DNS
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- name: Setup Let's Encrypt certificates
+  ansible.builtin.include_tasks: letsencrypt.yaml
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Step 3: Set up Firewall Rules
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- name: Set up Firewall Rules
+  ansible.builtin.include_tasks: firewall.yaml
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Step 4: Start Application Services
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- name: Deploy and start services
+  ansible.builtin.include_tasks: services.yaml

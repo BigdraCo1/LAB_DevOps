@@ -1,0 +1,71 @@
+---
+- name: Revoke and Reissue Let's Encrypt Certificate
+  hosts: myhosts
+  become: true
+
+  tasks:
+    - name: List existing certificates
+      ansible.builtin.command: certbot certificates
+      register: cert_list
+      changed_when: false
+
+    - name: Display certificates
+      ansible.builtin.debug:
+        var: cert_list.stdout_lines
+
+    - name: Revoke and delete certificate for {{ site_domain }}
+      ansible.builtin.command:
+        argv:
+          - certbot
+          - revoke
+          - --non-interactive
+          - --cert-name
+          - "{{ site_domain }}"
+          - --delete-after-revoke
+          - --reason
+          - cessationofoperation
+      register: revoke_result
+      when: cert_list.stdout is search(site_domain)
+
+    - name: Display revoke result
+      ansible.builtin.debug:
+        var: revoke_result.stdout_lines
+      when: revoke_result is defined and revoke_result.changed
+
+    - name: Create secrets directory
+      ansible.builtin.file:
+        path: /root/.secrets
+        state: directory
+        mode: "0700"
+
+    - name: Deploy Cloudflare API credentials
+      ansible.builtin.template:
+        src: roles/app_deployment/templates/cloudflare.ini
+        dest: /root/.secrets/cloudflare.ini
+        mode: "0600"
+
+    - name: Issue new wildcard certificate with Nginx hook
+      ansible.builtin.command:
+        argv:
+          - certbot
+          - certonly
+          - --non-interactive
+          - --agree-tos
+          - --email
+          - "{{ letsencrypt_email }}"
+          - --dns-cloudflare
+          - --dns-cloudflare-credentials
+          - /root/.secrets/cloudflare.ini
+          - --dns-cloudflare-propagation-seconds
+          - "120"
+          - --deploy-hook
+          - "docker exec nginx nginx -s reload"
+          - -d
+          - "{{ site_domain }}"
+          - -d
+          - "*.{{ site_domain }}"
+      register: issue_result
+
+    - name: Display issue result
+      ansible.builtin.debug:
+        var: issue_result.stdout_lines

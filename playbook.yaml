@@ -1,0 +1,11 @@
+---
+- name: Deploy Application with Let's Encrypt + Cloudflare DNS (Wildcard!)
+  hosts: myhosts
+  become: true
+
+  tasks:
+    - name: Ping my hosts
+      ansible.builtin.ping:
+
+  roles:
+    - app_deployment

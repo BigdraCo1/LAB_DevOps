@@ -1,0 +1,108 @@
+---
+# Let's Encrypt with Cloudflare DNS
+
+- name: Check certbot
+  ansible.builtin.command: which certbot
+  register: certbot
+  changed_when: false
+  failed_when: false
+
+- name: Install certbot and Cloudflare DNS plugin
+  ansible.builtin.apt:
+    name:
+      - certbot
+      - python3-certbot-dns-cloudflare
+    state: present
+    update_cache: yes
+  when: certbot.rc != 0
+
+- name: Create .secrets directory for Cloudflare credentials
+  ansible.builtin.file:
+    path: /root/.secrets
+    state: directory
+    mode: "0700"
+
+- name: Deploy Cloudflare API credentials
+  ansible.builtin.template:
+    src: cloudflare.ini
+    dest: /root/.secrets/cloudflare.ini
+    mode: "0600"
+
+- name: Check if Let's Encrypt certificates exist
+  ansible.builtin.stat:
+    path: /etc/letsencrypt/live/{{ site_domain }}/fullchain.pem
+  register: letsencrypt_cert
+
+- name: Display certificate status
+  ansible.builtin.debug:
+    msg: "Let's Encrypt certificate exists: {{ letsencrypt_cert.stat.exists }}"
+
+- name: Request Let's Encrypt wildcard certificate
+  ansible.builtin.command: >
+    certbot certonly
+    --non-interactive
+    --dns-cloudflare
+    --dns-cloudflare-credentials /root/.secrets/cloudflare.ini
+    --dns-cloudflare-propagation-seconds 120
+    -d {{ site_domain }}
+    -d *.{{ site_domain }}
+  register: cert_request
+  when: not letsencrypt_cert.stat.exists
+
+- name: Display certificate request result
+  ansible.builtin.debug:
+    var: cert_request.stdout_lines
+  when: cert_request is defined and cert_request.changed
+
+- name: Create renewal-hooks deploy directory
+  ansible.builtin.file:
+    path: /etc/letsencrypt/renewal-hooks/deploy
+    state: directory
+    mode: "0755"
+
+- name: Create nginx reload hook for auto-renewal
+  ansible.builtin.copy:
+    content: |
+      #!/bin/bash
+      # Reload nginx after certificate renewal (zero downtime)
+      docker exec nginx nginx -s reload 2>/dev/null || true
+    dest: /etc/letsencrypt/renewal-hooks/deploy/reload_nginx.sh
+    mode: "0755"
+
+- name: Setup certificate auto-renewal with certbot timer
+  ansible.builtin.systemd:
+    name: certbot.timer
+    enabled: yes
+    state: started
+
+- name: Get certificate expiry date
+  ansible.builtin.shell: |
+    openssl x509 -in /etc/letsencrypt/live/{{ site_domain }}/fullchain.pem -noout -enddate | cut -d= -f2
+  register: cert_expiry
+  changed_when: false
+  when: letsencrypt_cert.stat.exists
+
+- name: Display certificate information
+  ansible.builtin.debug:
+    msg:
+      - "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      - "✓ Let's Encrypt with Cloudflare DNS"
+      - "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      - ""
+      - "Domain: {{ site_domain }}"
+      - "Wildcard: *.{{ site_domain }} ✅"
+      - "Certificate: /etc/letsencrypt/live/{{ site_domain }}/fullchain.pem"
+      - "Expires: {{ cert_expiry.stdout | default('Check after first issuance') }}"
+      - ""
+      - "FEATURES:"
+      - "  ✅ Wildcard certificate (covers all subdomains!)"
+      - "  ✅ Cloudflare DNS automation"
+      - "  ✅ Auto-renewal via systemd timer"
+      - "  ✅ Nginx restart on renewal"
+      - ""
+      - "Valid domains:"
+      - "  - https://{{ site_domain }}"
+      - "  - https://www.{{ site_domain }}"
+      - "  - https://api.{{ site_domain }}"
+      - "  - https://*.{{ site_domain }} (any subdomain)"
+      - ""

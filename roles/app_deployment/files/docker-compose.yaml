@@ -1,0 +1,18 @@
+services:
+  myapp:
+    image: myapp:v1
+    container_name: myapp
+    restart: unless-stopped
+    network_mode: host
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      myapp:
+        condition: service_started
